@@ -1,0 +1,147 @@
+import pdfplumber
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.llms import Ollama
+from langchain.chains import LLMChain
+from langchain.prompts import PromptTemplate
+
+def extract_tables_from_page(pdf_path, page_number):
+    tables = []
+    print(pdf_path)
+    with pdfplumber.open(pdf_path) as pdf:
+        if page_number <= len(pdf.pages):  # Check if page exists
+            page = pdf.pages[page_number - 1]  # 0-based index
+            extracted_tables = page.extract_tables()
+            
+          
+            
+            if extracted_tables:
+                print(f"📊 {len(extracted_tables)} tables found on page {page_number}")
+                tables = extracted_tables
+                return format_table_to_text(tables)
+                        
+            else:
+                print(f"⚠️ No tables found on page {page_number}")
+
+    return tables
+
+def format_table_to_text(tables):
+    """Convert extracted tables into structured text format."""
+    formatted_text = ""
+    
+    for i, table in enumerate(tables, start=1):
+        #formatted_text += f"\n🔹 **Table {i}:**\n"
+        for row in table:
+            # Remove extra spaces, replace empty cells with '-'
+            cleaned_row = [cell.strip() if cell else "" for cell in row]
+            formatted_text += " | ".join(cleaned_row) + "\n"
+
+    return formatted_text.strip()
+
+
+
+import pdfplumber
+
+def extract_text_from_page(pdf_path, page_number):
+    """Extract all text from a specific page in a PDF."""
+    with pdfplumber.open(pdf_path) as pdf:
+        if page_number <= len(pdf.pages):  # Check if page exists
+            page = pdf.pages[page_number - 1]  # 0-based index
+            text = page.extract_text()
+            if text:
+                return f"--- Page {page_number} ---\n{text}"
+            else:
+                return f"⚠️ No text found on page {page_number}"
+        else:
+            return f"❌ Page {page_number} does not exist in the document."
+
+
+def create_ollama_chain(model_name="llama3.1"):
+    """
+    Extract mutual fund details from a PDF using LangChain with an Ollama-hosted LLaMA 3.1 model.
+    
+    Args:
+        pdf_path (str): Path to the mutual fund PDF.
+        fund_name (str): The name of the mutual fund to search for in the document.
+        model_name (str): The Ollama model name (default is "llama3").
+    
+    Returns:
+        list: Extracted mutual fund details in JSON format.
+    """
+    
+  
+
+    # Initialize Ollama LLM with LLaMA 3.1
+    llm = Ollama(model=model_name)
+
+    # Define Prompt Template
+    prompt_template = PromptTemplate(
+        input_variables=["text", "fund_name"],
+        template="""
+        Extract details for the mutual fund named "{fund_name}" from the given text.
+        
+        Required details:
+        - Fund Name
+        - AMC (Asset Management Company)
+        - Expense Ratio (Direct & Regular Plans)
+        - Inception Date
+        - Exit Load
+        - Fund Manager(s)
+        - Fund Objective
+        - Fund Type (Equity, Debt, Hybrid, etc.)
+        - Risk Level (Riskometer)
+
+        Text:
+        {text}
+
+        Provide a structured JSON response:
+        {{
+            "Fund Name": "{fund_name}",
+            "AMC Name": "...",
+            "Expense Ratio": {{"Direct": "...%", "Regular": "...%"}},
+            "Inception Date": "...",
+            "Exit Load": "...",
+            "Fund Manager": ["...", "..."],
+            "Fund Objective": "...",
+            "Fund Type": "...",
+            "Risk Level": "..."
+        }}
+        """
+    )
+
+    # Create LangChain LLM Chain
+    chain = LLMChain(llm=llm, prompt=prompt_template)
+
+    return chain
+
+def extract_fact_sheet_details(chain, fund_name, text):
+      # Split text for better processing
+        splitter = RecursiveCharacterTextSplitter(chunk_size=3000, chunk_overlap=200)
+        chunks = splitter.split_text(text)
+
+          # Process each chunk and extract results
+        extracted_data = []
+        for chunk in chunks:
+            response = chain.run(text=chunk, fund_name=fund_name)
+            extracted_data.append(response)
+        return extracted_data
+
+
+
+
+
+
+
+
+
+
+pdf="/Users/njp60/Documents/code/mutualfundbackend/funddata/factsheets/factsheet1.pdf"
+
+page_tables=extract_tables_from_page(pdf,page_number=24)
+page_text = extract_text_from_page(pdf, page_number=24)
+
+
+chain=create_ollama_chain()
+
+factsheet=extract_fact_sheet_details(chain, "Mirae Asset Large Cap Fund", page_text+page_tables)
+
+print(factsheet)

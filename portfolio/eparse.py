@@ -354,3 +354,64 @@ def clean_hdfc(df_raw, fund_names, sheets_to_avoid, AMC_NAME, datafile, output_f
 
     full_data.to_excel(output_file, index=False)
     return full_data
+
+def clean_canara(sheet_df, fund_name, full_path):
+    df_raw = sheet_df.copy()
+    df_raw.dropna(how="all", inplace=True)
+    df_raw.columns = df_raw.columns.str.strip().str.replace(r"\s+", " ", regex=True)
+
+    df_raw.rename(columns={
+        "Name of the Instrument": "Name of Instrument",
+        "Market/Fair Value (Rs. in Lacs)": "Market Value",
+        "% to Net Assets": "% to Net Assets",
+        "Yield %": "Yield",
+        "Industry / Rating": "Industry",
+        "Market Capitalization": "Market Capitalization"
+    }, inplace=True)
+
+    if "ISIN" in df_raw.columns:
+        isin_idx = df_raw.columns.get_loc("ISIN")
+        df_raw.insert(isin_idx + 1, "Coupon", "")
+    else:
+        df_raw["Coupon"] = ""
+
+    if "% to Net Assets" in df_raw.columns:
+        df_raw["% to Net Assets"] = (
+            df_raw["% to Net Assets"]
+            .astype(str)
+            .str.replace(r"[^\d.\-]", "", regex=True)
+            .replace("", "0")
+            .astype(float)
+        )
+
+    if "Yield" in df_raw.columns:
+        df_raw["Yield"] = (
+            df_raw["Yield"]
+            .astype(str)
+            .str.replace(r"[^\d.\-]", "", regex=True)
+            .replace("", "0")
+            .astype(float)
+        )
+    else:
+        df_raw["Yield"] = 0.0
+
+    df_raw["Yield"] = df_raw["Yield"].replace(0, "")
+    df_raw["Type"] = df_raw["Yield"].apply(lambda x: "Debt" if pd.notna(x) and x != "" else "Equity")
+
+    df_raw["Scheme Name"] = fund_name
+    df_raw["AMC"] = "Canara Robeco Mutual Fund"
+
+    required_columns = [
+        "Name of Instrument", "ISIN", "Coupon", "Industry", "Quantity",
+        "Market Value", "% to Net Assets", "Market Capitalization", "Yield",
+        "Type", "Scheme Name", "AMC"
+    ]
+
+    for col in required_columns:
+        if col not in df_raw.columns:
+            df_raw[col] = ""
+
+    df_final = df_raw[required_columns]
+    df_final = df_final[df_final["ISIN"].astype(str).str.startswith("IN", na=False)]
+    df_final = df_final.drop(columns=["Market Capitalization"], errors="ignore")
+    return df_final

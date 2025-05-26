@@ -101,4 +101,19 @@ class HDFCParser(FundPortfolioParser):
     def _clean_sheet(self, sheet_df, fund_name):
         return clean_hdfc(sheet_df, fund_name, self.full_path)
 
+class CanaraParser(FundPortfolioParser):
+    def __init__(self, datadir):
+        super().__init__(datadir, amc_name="Canara Robeco Mutual Fund")
 
+    def _read_index_sheet(self):
+        return {}  # Canara doesn’t use an index sheet, fallback to raw B1
+
+    def _get_fund_name(self, sheet_name, sheet_df):
+        try:
+            raw_text = str(sheet_df.iloc[0, 1]).strip()
+            return raw_text.split("(")[0].split("-")[0].strip()
+        except Exception:
+            return "Unknown Scheme"
+
+    def _clean_sheet(self, sheet_df, fund_name):
+        return clean_canara(sheet_df, fund_name, self.full_path)
